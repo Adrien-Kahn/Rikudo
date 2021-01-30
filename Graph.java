@@ -31,8 +31,8 @@ public class Graph {
 	
 	// x_i,v (the i-th vertex in the path is v) is represented by the integer i + n*v + 1 because for some reason sat4j can't deal with 0
 	// Therefore, x_k = x_i,v where i = (k - 1) % n and v = (k - 1) // n
-	
-	public int[] hamiltonianPath(int s, int t) {
+		
+	public int[] hamiltonianPathSAT(int s, int t) {
 		
 		int n = vertexNumber();
 		ISolver solver = SolverFactory.newDefault();
@@ -102,7 +102,101 @@ public class Graph {
 		try {
 			if (solver.isSatisfiable()) {
 				
-				System.out.println("Satisfiable problem!");
+				System.out.println("Hamiltonian Path Found");
+				
+				int[] solution = solver.model();				
+				int[] path = new int[n];
+
+				for (int k = 0; k < n*n; k ++) {
+					if (solution[k] > 0) {
+						path[(solution[k] - 1) % n] = (solution[k] - 1) / n;
+					}
+				}
+				
+				System.out.println(Arrays.toString(path));
+				return path;
+				
+			} else {
+				System.out.println("Unsatisfiable problem!");
+				return new int[] {-1};
+			}
+			
+		} catch (TimeoutException e) {
+			System.out.println("Timeout, sorry!");
+			return new int[] {-1};
+		}
+		
+	}
+	
+	
+	
+	
+	public int[] hamiltonianCycleSAT() {
+		
+		int n = vertexNumber();
+		ISolver solver = SolverFactory.newDefault();
+		
+		try {
+			
+			// Each vertex appears AT LEAST ONCE in the cycle
+			for (int v = 0; v < n; v ++) {
+				int[] a = new int[n];
+				for (int i = 0; i < n; i ++) {
+					a[i] = i + n*v + 1;
+				}
+				solver.addClause(new VecInt(a));
+			}
+			
+			// Each vertex appears NO MORE THAN ONCE in the cycle
+			for (int v = 0; v < n; v ++) {
+				for (int i = 0; i < n; i ++) {
+					for (int j = i + 1; j < n; j ++) {
+						solver.addClause(new VecInt(new int[] {- (i + n*v + 1), - (j + n*v + 1)}));
+					}
+				}
+			}
+			
+			// Each index in the cycle is occupied by AT LEAST ONE vertex
+			for (int i = 0; i < n; i ++) {
+				int[] a = new int[n];
+				for (int v = 0; v < n; v ++) {
+					a[v] = i + n*v + 1;
+				}
+				solver.addClause(new VecInt(a));
+			}
+			
+			// Each index is occupied by NO MORE THAN ONE vertex
+			for (int i = 0; i < n; i ++) {
+				for (int v = 0; v < n; v ++) {
+					for (int u = v + 1; u < n; u ++) {
+						solver.addClause(new VecInt(new int[] {- (i + n*v + 1), - (i + n*u + 1)}));
+					}
+				}
+			}
+			
+			// Consecutive vertices in the cycle are adjacent in the graph
+			for (int i = 0; i < n; i ++) {
+				for (int v = 0; v < n; v ++) {
+					for (int u = 0; u < n; u ++) {
+						if (!neighbors(u).contains(v)) {
+							solver.addClause(new VecInt(new int[] {- (i + n*u + 1), - (((i + 1)%n) + n*v + 1)}));
+						}
+					}
+				}
+			}
+
+			
+		} catch (ContradictionException e1) {
+			e1.printStackTrace();
+		}
+		
+		System.out.println("Number of variables: " + solver.nVars());
+		System.out.println("Number of constraints: " + solver.nConstraints());
+		
+		try {
+			if (solver.isSatisfiable()) {
+				
+				System.out.println("Hamiltonian Cycle Found");
 				
 				int[] solution = solver.model();				
 				int[] path = new int[n];
@@ -318,11 +412,11 @@ public class Graph {
 	public static void main(String[] args) {
 		
 		/*
-		ArrayList<Integer> l0 = new ArrayList<Integer>(Arrays.asList(3));
+		ArrayList<Integer> l0 = new ArrayList<Integer>(Arrays.asList(3, 1));
 		ArrayList<Integer> l1 = new ArrayList<Integer>(Arrays.asList(0, 2));
 		ArrayList<Integer> l2 = new ArrayList<Integer>(Arrays.asList(0, 3));
 		ArrayList<Integer> l3 = new ArrayList<Integer>(Arrays.asList(1, 4));
-		ArrayList<Integer> l4 = new ArrayList<Integer>(Arrays.asList(0));
+		ArrayList<Integer> l4 = new ArrayList<Integer>(Arrays.asList(0, 2));
 		
 		ArrayList<ArrayList<Integer>> al  = new ArrayList<ArrayList<Integer>>(Arrays.asList(l0, l1, l2, l3, l4));
 		
@@ -330,7 +424,8 @@ public class Graph {
 		
 		Graph g = new Graph(al);
 		
-		g.hamiltonianPath(1, 0);
+		g.hamiltonianPathSAT(1, 0);
+		g.hamiltonianCycleSAT();
 		*/
 		
 		/*
@@ -344,19 +439,44 @@ public class Graph {
 		System.out.println(cyg.adjacencyList);
 		cyg.hamiltonianPath(7, 6);
 		cyg.hamiltonianBacktracking(7, 6);
+		*/
 		
-		
+		/*
 		Graph gg1 = gridGraph(4);
 		System.out.println(gg1.adjacencyList);
 		gg1.hamiltonianBacktracking(0,15);
 		gg1.hamiltonianBacktracking_counting(1,15);
-		
-		Graph gg2 = gridGraph(3);
-		gg2.hamiltonianBacktracking_counting(1,15);
-
 		*/
 		
+		/*
+		Graph gg2 = gridGraph(3);
+		System.out.println(gg2.adjacencyList);
+		gg2.hamiltonianPathSAT(0, 8);
+		gg2.hamiltonianCycleSAT();
+		gg2.hamiltonianBacktracking_counting(1,4);
+		*/
 		
+		// Evaluate computation time
+		
+		System.out.println("Start");
+				
+		ArrayList<Integer> x = new ArrayList<Integer>();
+		ArrayList<Double> y = new ArrayList<Double>();
+		
+		for (int k = 1; k < 10; k ++) {
+			
+			x.add(k*k);
+			
+			Graph cg = gridGraph(k);
+			long t = System.currentTimeMillis();
+			cg.hamiltonianPathSAT(1, 0);
+			y.add((System.currentTimeMillis() - t)/1000.);
+			
+		}
+		
+		System.out.println(x);
+		System.out.println(y);
+
 		
 	}
 
